@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Search</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        header {
+            background-color: #032541;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            margin: 0;
+        }
+        .search-container {
+            display: flex;
+            margin-bottom: 30px;
+        }
+        #search-input {
+            flex-grow: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px 0 0 4px;
+        }
+        #search-button {
+            padding: 10px 20px;
+            background-color: #01b4e4;
+            color: white;
+            border: none;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #search-button:hover {
+            background-color: #0099c1;
+        }
+        #loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            color: #666;
+        }
+        .movie-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .movie-card {
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+            cursor: pointer;
+        }
+        .movie-card:hover {
+            transform: translateY(-5px);
+        }
+        .movie-poster {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+        }
+        .movie-info {
+            padding: 15px;
+        }
+        .movie-title {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .movie-date {
+            color: #666;
+            font-size: 14px;
+        }
+        .rating {
+            display: inline-block;
+            padding: 5px 10px;
+            background-color: #032541;
+            color: white;
+            border-radius: 15px;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        #movie-details {
+            display: none;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .movie-detail-content {
+            display: flex;
+            gap: 30px;
+        }
+        .movie-backdrop {
+            max-width: 300px;
+            border-radius: 8px;
+        }
+        .movie-metadata {
+            flex-grow: 1;
+        }
+        .back-button {
+            margin-top: 20px;
+            padding: 8px 16px;
+            background-color: #032541;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .genre-tag {
+            display: inline-block;
+            background-color: #eee;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Movie Search</h1>
+    </header>
+
+    <div class="search-container">
+        <input type="text" id="search-input" placeholder="Search for a movie...">
+        <button id="search-button">Search</button>
+    </div>
+
+    <div id="loading">Searching for movies...</div>
+
+    <div id="results">
+        <div class="movie-grid" id="movie-grid"></div>
+    </div>
+
+    <div id="movie-details"></div>
+
+    <script>
+        // Replace with your actual API key
+        const API_KEY = '2a2acf687e72f8600018b15205a81ce5';
+        const BASE_URL = 'https://api.themoviedb.org/3';
+        const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
+
+        const searchInput = document.getElementById('search-input');
+        const searchButton = document.getElementById('search-button');
+        const loadingIndicator = document.getElementById('loading');
+        const movieGrid = document.getElementById('movie-grid');
+        const movieDetails = document.getElementById('movie-details');
+
+        // Event listeners
+        searchButton.addEventListener('click', searchMovies);
+        searchInput.addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                searchMovies();
+            }
+        });
+
+        // Search for movies
+        async function searchMovies() {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            showLoading();
+            clearResults();
+            hideMovieDetails();
+
+            try {
+                const url = `${BASE_URL}/search/movie?api_key=${API_KEY}&query=${encodeURIComponent(query)}&language=en-US&page=1&include_adult=false`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error('API request failed');
+                }
+
+                const data = await response.json();
+                displayMovieResults(data.results);
+            } catch (error) {
+                console.error('Error searching movies:', error);
+                movieGrid.innerHTML = '<p>An error occurred while searching. Please try again.</p>';
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Display movie search results
+        function displayMovieResults(movies) {
+            if (!movies || movies.length === 0) {
+                movieGrid.innerHTML = '<p>No movies found. Try a different search term.</p>';
+                return;
+            }
+
+            movieGrid.innerHTML = '';
+            
+            movies.forEach(movie => {
+                const movieCard = document.createElement('div');
+                movieCard.className = 'movie-card';
+                movieCard.addEventListener('click', () => getMovieDetails(movie.id));
+
+                const posterPath = movie.poster_path 
+                    ? `${IMAGE_BASE_URL}${movie.poster_path}`
+                    : 'https://via.placeholder.com/300x450?text=No+Poster';
+
+                movieCard.innerHTML = `
+                    <img class="movie-poster" src="${posterPath}" alt="${movie.title}">
+                    <div class="movie-info">
+                        <h3 class="movie-title">${movie.title}</h3>
+                        <div class="movie-date">${formatDate(movie.release_date)}</div>
+                        <div class="rating">${movie.vote_average.toFixed(1)}</div>
+                    </div>
+                `;
+
+                movieGrid.appendChild(movieCard);
+            });
+        }
+
+        // Get detailed information about a movie
+        async function getMovieDetails(movieId) {
+            showLoading();
+
+            try {
+                const url = `${BASE_URL}/movie/${movieId}?api_key=${API_KEY}&language=en-US&append_to_response=credits`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error('API request failed');
+                }
+
+                const movie = await response.json();
+                displayMovieDetails(movie);
+            } catch (error) {
+                console.error('Error getting movie details:', error);
+                movieDetails.innerHTML = '<p>An error occurred while loading movie details. Please try again.</p>';
+                movieDetails.style.display = 'block';
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Display detailed information about a movie
+        function displayMovieDetails(movie) {
+            movieGrid.style.display = 'none';
+            movieDetails.style.display = 'block';
+
+            const backdropPath = movie.backdrop_path 
+                ? `${IMAGE_BASE_URL}${movie.backdrop_path}`
+                : 'https://via.placeholder.com/500x281?text=No+Backdrop';
+
+            // Get director
+            let director = 'Unknown';
+            if (movie.credits && movie.credits.crew) {
+                const directorObj = movie.credits.crew.find(person => person.job === 'Director');
+                if (directorObj) {
+                    director = directorObj.name;
+                }
+            }
+
+            // Get top cast
+            let cast = [];
+            if (movie.credits && movie.credits.cast) {
+                cast = movie.credits.cast.slice(0, 5).map(person => person.name);
+            }
+
+            // Format genres
+            const genres = movie.genres.map(genre => `<span class="genre-tag">${genre.name}</span>`).join('');
+
+            movieDetails.innerHTML = `
+                <div class="movie-detail-content">
+                    <div>
+                        <img class="movie-backdrop" src="${backdropPath}" alt="${movie.title}">
+                    </div>
+                    <div class="movie-metadata">
+                        <h2>${movie.title} <span class="movie-date">(${movie.release_date.split('-')[0]})</span></h2>
+                        <p>${formatDate(movie.release_date)} • ${movie.runtime} min</p>
+                        <div>${genres}</div>
+                        <div class="rating">Rating: ${movie.vote_average.toFixed(1)}/10</div>
+                        <h3>Overview</h3>
+                        <p>${movie.overview}</p>
+                        <p><strong>Director:</strong> ${director}</p>
+                        <p><strong>Cast:</strong> ${cast.join(', ')}</p>
+                    </div>
+                </div>
+                <button class="back-button" onclick="showMovieGrid()">Back to Results</button>
+            `;
+        }
+
+        // Helper function to format date
+        function formatDate(dateStr) {
+            if (!dateStr) return 'Unknown date';
+            
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        }
+
+        // Show loading indicator
+        function showLoading() {
+            loadingIndicator.style.display = 'block';
+        }
+
+        // Hide loading indicator
+        function hideLoading() {
+            loadingIndicator.style.display = 'none';
+        }
+
+        // Clear search results
+        function clearResults() {
+            movieGrid.innerHTML = '';
+        }
+
+        // Show movie grid and hide details
+        function showMovieGrid() {
+            movieDetails.style.display = 'none';
+            movieGrid.style.display = 'grid';
+        }
+
+        // Hide movie details
+        function hideMovieDetails() {
+            movieDetails.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
